@@ -1,0 +1,54 @@
+﻿<Window x:Class="_3DSMaxFileVersion.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:_3DSMaxFileVersion"
+        mc:Ignorable="d"
+        Title="3DS Max File Version Checker v20180103" Height="400" Width="500" ResizeMode="CanResizeWithGrip" Icon="Icon1.ico">
+    <DockPanel>
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="180" />
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem>
+                <TextBlock Name="LblPath"></TextBlock>
+            </StatusBarItem>
+            <Separator Grid.Column="1" />
+            <StatusBarItem Grid.Column="2" Content="©2017 Art Empire, Simon Lee"/>
+        </StatusBar>
+        <Grid>
+            <ListView x:Name="ListView1" Margin="10,10,10,30">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="File Name" Width="200" DisplayMemberBinding="{Binding FileName}" />
+                        <GridViewColumn Header="Max Version" Width="100" DisplayMemberBinding="{Binding Version}">
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock TextAlignment="Center"/>
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn Header="Save as Version" Width="100" DisplayMemberBinding="{Binding SaveAsVersion}" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+            <CheckBox x:Name="CheckBox1" Content="Include subdirectory?" Margin="10,0,0,2" Height="20" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+            <Button x:Name="BtnPath" Content="Folder" Margin="170,0,0,5" Width="80" Height="20" VerticalAlignment="Bottom" HorizontalAlignment="Left" Click="BtnPath_Click" />
+            <Button x:Name="BtnScan" Content="Scan" Margin="0,0,10,5" Width="100" Height="20" VerticalAlignment="Bottom" HorizontalAlignment="Right" Click="BtnScan_OnClick" />
+        </Grid>
+    </DockPanel>
+</Window>
