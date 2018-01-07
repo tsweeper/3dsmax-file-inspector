@@ -1,249 +1,338 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Media;
 using Ookii.Dialogs.Wpf;
 using OpenMcdf;
 
 namespace _3DSMaxFileVersion
 {
     /// <summary>
-    /// Interaction logic for MainWindow.xaml
+    ///     Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
+        public string TargetPath;
+
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        public string Path;
+        private void CheckBox1_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (Directory.Exists(TargetPath))
+                //GetFiles(TargetPath);
+                RefreshListView();
+        }
 
         private void BtnPath_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new VistaFolderBrowserDialog();
             if (!dialog.ShowDialog(this).GetValueOrDefault()) return;
-            Path = dialog.SelectedPath;
-            LblPath.Text = Path;
+            TargetPath = dialog.SelectedPath;
+            LblPath.Text = "Checking: " + TargetPath;
 
-            ListView1.Items.Clear();
-            var files = (CheckBox1.IsChecked.HasValue && CheckBox1.IsChecked.Value)
-                ? Directory.GetFiles(Path, "*.max", SearchOption.AllDirectories)
-                : Directory.GetFiles(Path, "*.max", SearchOption.TopDirectoryOnly);
+            //GetFiles(dialog.SelectedPath);
+            RefreshListView();
+        }
 
-            foreach (var filename in files)
+        private void GetFiles(string directory)
+        {
+            // old method
+            //var files = CheckBox1.IsChecked.HasValue && CheckBox1.IsChecked.Value
+            //? Directory.GetFiles(TargetPath, "*.max", SearchOption.AllDirectories)
+            //: Directory.GetFiles(TargetPath, "*.max", SearchOption.TopDirectoryOnly);
+            //? Directory.EnumerateFiles(TargetPath, "*.max", SearchOption.AllDirectories)
+            //: Directory.EnumerateFiles(TargetPath, "*.max", SearchOption.TopDirectoryOnly);
+
+            //var files = new List<string>();
+            //var includeSubdir = CheckBox1.IsChecked != null && CheckBox1.IsChecked.Value;
+            //CheckBox1.IsEnabled = false;
+            //BtnPath.IsEnabled = false;
+
+            // Create an enumeration of the files we will want to process that simply accumulates these values...
+            long total = 0;
+            var fcounter = new CSharpTest.Net.IO.FindFile(directory, "*.max", true, true, true) {RaiseOnAccessDenied = false};
+            fcounter.FileFound +=
+                (o, e) =>
+                {
+                    if (!e.IsDirectory)
+                    {
+                        Interlocked.Increment(ref total);
+                    }
+                };
+
+            // Start a high-priority thread to perform the accumulation
+            Thread t = new Thread(fcounter.Find)
             {
-                ListView1.Items.Add(new LvItem { FileName = System.IO.Path.GetFileNameWithoutExtension(filename), Version = "", SaveAsVersion = "" });
-            }
+                IsBackground = true,
+                Priority = ThreadPriority.AboveNormal,
+                Name = "Enumerate Files"
+            };
+            t.Start();
+
+            // Allow the accumulator thread to get a head-start on us
+            do { Thread.Sleep(100); }
+            while (total < 100 && t.IsAlive);
+
+            // Now we can process the files normally and update a percentage
+            long count = 0, percentage = 0;
+            var task = new CSharpTest.Net.IO.FindFile(directory, "*.max", true, true, true) {RaiseOnAccessDenied = false};
+            task.FileFound +=
+                (o, e) =>
+                {
+                    if (!e.IsDirectory)
+                    {
+                        //ProcessFile(e.FullPath);
+                        Console.WriteLine("found {0}", e.FullPath);
+                        // Update the percentage complete...
+                        long progress = ++count * 100 / Interlocked.Read(ref total);
+                        if (progress > percentage && progress <= 100)
+                        {
+                            percentage = progress;
+                            Console.WriteLine("{0}% complete.", percentage);
+                        }
+                    }
+                };
+
+            task.Find();
+            // probably task is completes
+            //CheckBox1.IsEnabled = true;
+            //BtnPath.IsEnabled = true;
+            //LblPath.Text = "Checking: " + TargetPath;
+            //Console.WriteLine("Enumerated {0:n0} files", total);
         }
 
-        private class LvItem
+        private void RefreshListView()
         {
-            public string FileName { get; set; }
-            public string Version { get; set; }
-            public string SaveAsVersion { get; set; }
-        }
+            var files = CheckBox1.IsChecked.HasValue && CheckBox1.IsChecked.Value
+            //? Directory.GetFiles(TargetPath, "*.max", SearchOption.AllDirectories)
+            //: Directory.GetFiles(TargetPath, "*.max", SearchOption.TopDirectoryOnly);
+            ? Directory.EnumerateFiles(TargetPath, "*.max", SearchOption.AllDirectories)
+            : Directory.EnumerateFiles(TargetPath, "*.max", SearchOption.TopDirectoryOnly);
 
-        private void BtnScan_OnClick(object sender, RoutedEventArgs e)
-        {
-            ListView1.Items.Clear();
-            var files = (CheckBox1.IsChecked.HasValue && CheckBox1.IsChecked.Value)
-                ? Directory.GetFiles(Path, "*.max", SearchOption.AllDirectories)
-                : Directory.GetFiles(Path, "*.max", SearchOption.TopDirectoryOnly);
-
+            var items = new List<LvItem>();
             foreach (var file in files)
             {
-                // OpenMCDF is a 100% managed .net component that allows client applications to manipulate COM structured storage files, also known as Microsoft Compound Document Format files.
-                // Structured storage file is a container which include multiple streams of information.
-                //
-                //
-                // 3ds Max's stream item names
-                // Scene
-                // Config
-                // ClassData
-                // DllDirectory
-                // SaveConfigData
-                // VideoPostQueue
-                // ClassDirectory3
-                // FileAssetMetaData3	
-                // \u0005SummaryInformation
-                // ScriptedCustAttribDefs	
-                // \u0005DocumentSummaryInformation
+                var docInfo = ParseDocInfo(file);
 
-                var cf = new CompoundFile(file);
-                //Action<CFItem> va = delegate (CFItem item)
-                //{
-                //    Console.WriteLine("Name: {0, 30}\tIsRoot {1,5}\tIsStorage {2,5}\tIsStream {3,5}", item.Name, item.IsRoot, item.IsStorage, item.IsStream);
-                //};
-                //cf.RootStorage.VisitEntries(va, true);
+                var warningInfo = (ValidateObjectsName(docInfo) > 0) ? "\u26A0" : "";
+                var tip = (ValidateObjectsName(docInfo) > 0) ? "May have ALC scripts" : "";
 
-                //CFStream docInfo = cf.RootStorage.TryGetStream("Config");
-                var docInfo = cf.RootStorage.TryGetStream("\u0005DocumentSummaryInformation");
+                var verInfo = GetVersionInfo(docInfo.Values.ToArray()[0]);
+                if (!verInfo.TryGetValue(0, out var verMax)) verMax = "???";
+                if (!verInfo.TryGetValue(1, out var verSave)) verSave = "???";
 
-                if (docInfo != null)
+                var item = new LvItem
                 {
-                    byte[] sd = docInfo.GetData();
+                    About = warningInfo,
+                    AboutTooltip = tip,
+                    FileName = Path.GetFileNameWithoutExtension(file),
+                    FilePath = file,
+                    Version = verMax,
+                    SaveAsVersion = verSave,
+                    SumInfo = null,
+                    DocInfo = docInfo,
+                };
 
-                    // DocumentSummaryInfoStream header start
-                    // 0x00 byte[2]  byteOrder        0xFFFE
-                    // 0x02 byte[2]  version          0x0000
-                    // 0x04 byte[1]  OSMajorVersion
-                    // 0x05 byte[1]  OSMinorVersion
-                    // 0x06 byte[2]  OSType
-                    // 0x08 byte[10] applicationClsid
-                    // 0x18 byte[4]  cSections        0x00000002
-                    // 0x1c byte[10] FMTID_DocSummaryInformation 
-                    var sec1Guid = new Guid(sd.Skip(0x1c).Take(0x10).ToArray()); // 02 D5 CD D5 9C 2E 1B 10 93 97 08 00 2B 2C F9 AE
-                    // 0x2c byte[4]  sectionOffset
-                    var sec1Offset = BitConverter.ToInt32(sd, 0x2c);
-                    // 0x30 byte[10] FMTID_UserDefinedProperties 
-                    var sec2Guid = new Guid(sd.Skip(0x30).Take(0x10).ToArray()); // 05 D5 CD D5 9C 2E 1B 10 93 97 08 00 2B 2C F9 AE
-                    // 0x40 byte[4]  sectionOffset
-                    var sec2Offset = BitConverter.ToInt32(sd, 0x40); // End of Header 0x44
+                items.Add(item);
+            }
+            ListView1.ItemsSource = items;
 
-                    // FMTID_DocSummaryInformation property set start
-                    // 0x44 byte[4]  cbSection      total length of first section
-                    var sec1Len = BitConverter.ToInt32(sd, sec1Offset);
-                    // 0x48 byte[4]  cProps         number of properties
-                    var sec1Cnt = BitConverter.ToInt32(sd, sec1Offset + 4); // 0x04; as far as allways 4 properties - codepage(0x01), unknown?(0x80000000), docParts(0x0d), headingPairs(0x0c)
+            var view = (CollectionView) CollectionViewSource.GetDefaultView(ListView1.ItemsSource);
+            view?.SortDescriptions.Add(new SortDescription("About", ListSortDirection.Descending));
+            view?.SortDescriptions.Add(new SortDescription("FileName", ListSortDirection.Ascending));
+        }
 
-                    var docProperties = new Dictionary<int, int>();
-                    for (var i = 0; i < sec1Cnt; i++)
+        private int ValidateObjectsName(Dictionary<string, Dictionary<int, string>> docInfo)
+        {
+            if (docInfo.Count <= 0) return 0;
+            var objInfo = docInfo.ElementAt(4).Value.Values.ToArray();
+            var alcNodes = new[]
+            {
+                "×þ×ü", "¡¡×ý×û", "¡¡¡¡", "¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡¡¡", "Rectangles135", "×ú×ú", "×þ×ú"
+            };
+            var alcHashSet = new HashSet<string>(alcNodes);
+            return objInfo.Count(alcHashSet.Contains);
+        }
+
+        private static Dictionary<int, string> GetVersionInfo(Dictionary<int, string> obj)
+        {
+            var returnValue = new Dictionary<int, string>();
+
+            var patternList = new Dictionary<string, string>
+            {
+                {"AppVerEN", "3ds Max Version"},
+                {"FileVerEN", "Saved As Version"},
+                {"AppVerCN", "3ds Max 版本"},
+                {"FileVerCN", "另存为版本"},
+                {"AppVerJA", "3ds Max バージョン"},
+                {"FileVerJA", "バージョンとして保存"}
+            };
+
+            // search version info
+            foreach (var k in obj)
+            foreach (var sPattern in patternList)
+            {
+                if (!Regex.IsMatch(k.Value, sPattern.Value, RegexOptions.IgnoreCase)) continue;
+                switch (sPattern.Key)
+                {
+                    case "AppVerEN":
+                    case "AppVerCN":
+                    case "AppVerJA":
+                        var verA = k.Value.Split(' ').Last();
+                        returnValue.Add(0, MaxString(verA));
+                        returnValue.Add(1, "-");
+                        break;
+                    case "FileVerEN":
+                    case "FileVerCN":
+                    case "FileVerJA":
+                        var verB = k.Value.Split(' ').Last();
+                        returnValue[1] = MaxString(verB);
+                        break;
+                }
+            }
+
+            return returnValue;
+        }
+
+        public Dictionary<string, Dictionary<int, string>> ParseDocInfo(string file)
+        {
+            var headParts = new Dictionary<string, int>();
+            var valueParts = new Dictionary<int, string>();
+
+            var cf = new CompoundFile(file);
+            var docInfo = cf.RootStorage.TryGetStream("\u0005DocumentSummaryInformation");
+            if (docInfo != null)
+            {
+                var streamData = docInfo.GetData(); // get byte[] of document information
+                var sec1Offset = BitConverter.ToInt32(streamData, 0x2c);
+                var sec2Offset = BitConverter.ToInt32(streamData, 0x40); // End of Header address 0x44
+
+                // get properties - get number of properties such as codepage(0x01), docParts(0x0d), headingPairs(0x0c), etc...
+                var sec1Cnt = BitConverter.ToInt32(streamData, sec1Offset + 4);
+                var docProperties = new Dictionary<int, int>();
+                for (var i = 0; i < sec1Cnt; i++)
+                {
+                    var pid = BitConverter.ToInt32(streamData, sec1Offset + 8 + 8 * i); // 0x4c byte[4]  property id
+                    var poffset =
+                        BitConverter.ToInt32(streamData, sec1Offset + 8 + 8 * i + 4); // 0x50 byte[4]  property offset
+                    docProperties.Add(pid, poffset);
+                }
+
+                // get CodePage property   wType[2] padding[2] value[2] unused[2]   = total 8 bytes
+                const int codePagePid = 0x01;
+                docProperties.TryGetValue(codePagePid, out var codePageOffset); // 0x44 + Offset
+                var codePageValue =
+                    BitConverter.ToUInt16(streamData, sec1Offset + codePageOffset + 4); // 1200 = utf-16, 65001 = utf-8
+
+                // get HeadingPair property
+                const int headPairPid = 0x0c; // BitConverter.ToInt32(sd, sec1Offset + 24); // 0x0c
+                docProperties.TryGetValue(headPairPid,
+                    out var headPairOffset); // BitConverter.ToInt32(sd, sec1Offset + 28);
+                var headPairElements = headPairOffset > 0
+                    ? BitConverter.ToInt32(streamData, sec1Offset + headPairOffset + 4)
+                    : 0;
+                var headPairArrayOffset = headPairOffset > 0 ? sec1Offset + headPairOffset + 8 : 0;
+
+                // get DocParts property
+                const int docPartsPid = 0x0d; // BitConverter.ToInt32(sd, sec1Offset + 32); // 0x0d
+                docProperties.TryGetValue(docPartsPid,
+                    out var docPartsOffset); // BitConverter.ToInt32(sd, sec1Offset + 36);
+                var docPartsElements = docPartsOffset > 0
+                    ? BitConverter.ToInt32(streamData, sec1Offset + docPartsOffset + 4)
+                    : 0;
+                var docPartsArrayOffset =
+                    docPartsOffset > 0
+                        ? sec1Offset + docPartsOffset + 8
+                        : 0; // skip byte[2] wType, byte[2] padding, byte[4] cElements
+
+                // start parsing heading pairs
+                try
+                {
+                    // parse heading pairs
+                    var buf = streamData.Skip(headPairArrayOffset).Take(streamData.Length - headPairArrayOffset)
+                        .ToArray(); // feel lazy to calc, putting all
+                    var pos = 0;
+                    for (var i = 0;
+                        i < headPairElements / 2;
+                        i++) // cElements is always twice the number of elements in rgHeadingPairs because each VtHeadingPair (section 2.3.3.1.13) element contains two values, headingString and headerParts.
                     {
-                        // 0x4c byte[4]  property id
-                        // 0x50 byte[4]  property offset
-                        var pid = BitConverter.ToInt32(sd, sec1Offset + 8 + 8 * i);
-                        var poffset = BitConverter.ToInt32(sd, sec1Offset + 8 + 8 * i + 4);
-                        docProperties.Add(pid, poffset);
-                        
-                    }
-                    // CodePage Property   wType[2] padding[2] value[2] unused[2]   = total 8 bytes
-                    var codePagePid = 0x01; // BitConverter.ToInt32(sd, sec1Offset +  8); // 0x1
-                    docProperties.TryGetValue(codePagePid, out var codePageOffset); // BitConverter.ToInt32(sd, sec1Offset + 12); // 0x44 + Offset
-                    var codePageType = BitConverter.ToInt16(sd, sec1Offset + codePageOffset);
-                    var codePageValue = BitConverter.ToUInt16(sd, sec1Offset + codePageOffset + 4); // 1200 = utf-16, 65001 = utf-8
-                    //
-                    var unknownPid = 0x80000000;  // BitConverter.ToInt32(sd, sec1Offset + 16); // 0x80000000
-                    var unknownOffset = BitConverter.ToInt32(sd, sec1Offset + 20);
-                    var UnknownArrayOffset = sec1Offset + unknownOffset;
-                    //
-                    var headPairPid = 0x0c; // BitConverter.ToInt32(sd, sec1Offset + 24); // 0x0c
-                    docProperties.TryGetValue(headPairPid, out var headPairOffset); // BitConverter.ToInt32(sd, sec1Offset + 28);
-                    var headPairElements = 0;
-                    var headPairArrayOffset = 0;
-                    if (headPairOffset > 0)
-                    {
-                        headPairElements = BitConverter.ToInt32(sd, sec1Offset + headPairOffset + 4);
-                        headPairArrayOffset = sec1Offset + headPairOffset + 8;
-                    }
-                    //
-                    var docPartsPID = 0x0d; // BitConverter.ToInt32(sd, sec1Offset + 32); // 0x0d
-                    docProperties.TryGetValue(docPartsPID, out var docPartsOffset); // BitConverter.ToInt32(sd, sec1Offset + 36);
-                    var docPartsElements = 0;
-                    var docPartsArrayOffset = 0;
-                    if (docPartsOffset > 0)
-                    {
-                        docPartsElements = BitConverter.ToInt32(sd, sec1Offset + docPartsOffset + 4);
-                        docPartsArrayOffset = sec1Offset + docPartsOffset + 8; // skip byte[2] wType, byte[2] padding, byte[4] cElements
-                    }
-
-                    // parsing test - headingPair property header and the first element
-                    //var wType                  = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 0); //new byte[2];
-                    //var padding                = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 2); //new byte[2];
-                    //var headingPairElments     = BitConverter.ToInt32(sd, sec1Offset + headPairOffset + 4); //new byte[4];
-                    //var headingStringType      = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 8); //new byte[2];
-                    //var headingStringPadding   = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 10); //new byte[2];
-                    //var headingStringValueCch  = BitConverter.ToInt32(sd, sec1Offset + headPairOffset + 12); //new byte[4];
-                    //var headingStringArray     = sd.Skip(sec1Offset + headPairOffset + 16).Take(headingStringValueCch).ToArray();
-                    //var headingString          = Encoding.GetEncoding(CodePageValue).GetString(headingStringArray).TrimEnd(Char.MinValue); //new byte[headingStringValueCch] //GetEncoding(932) Japanese?
-                    //var headerPartsWType       = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 16 + headingStringValueCch); //new byte[2];
-                    //var headerPartsPadding     = BitConverter.ToInt16(sd, sec1Offset + headPairOffset + 18 + headingStringValueCch); //new byte[2];
-                    //var headerPartsValue       = BitConverter.ToInt32(sd, sec1Offset + headPairOffset + 22 + headingStringValueCch); //new byte[4];
-
-                    int section2Length = BitConverter.ToInt32(sd, sec2Offset);
-                    int section2Count = BitConverter.ToInt32(sd, sec2Offset + 0x04);
-
-                    Console.WriteLine("\nName: {0}\tStreamLength: 0x{1:X4}({1,4})\tHeader Length: 0x{2:X4}({2,4})", System.IO.Path.GetFileName(file), sd.Length, 0x44);
-                    //Console.WriteLine("Fingerprint: {0:x8}", BitConverter.ToString(sd, 0x00, 0x08).Replace("-", " "));
-                    //Console.WriteLine("FMTID_DocSummaryInformation GUID1 {0}\tOffset1 0x{1:X4}({1,4})\tLength1 0x{2:X4}({2,4})\tCount1 0x{3:X4}({3,4})", sec1Guid, sec1Offset, sec1Len, sec1Cnt);
-                    //Console.WriteLine("Fingerprint: {0:x8}", BitConverter.ToString(sd, sec1Offset, 0x08).Replace("-", " "));
-                    Console.WriteLine("CodePage     (0x1): 0x{0:x8}({0,2})\t0x{1:x4}({1,4})\tCodePageType: 0x{2:x2}({2,2})\tCodePageValue: 0x{3:x2}({3,2})", codePagePid, codePageOffset, codePageType, codePageValue);
-                    //Console.WriteLine("Unknown             0x{0:x8}(  )\t0x{1:x4}({1,4})\t0x{2:x4}({2,4})", UnknownPID, UnknownOffset, UnknownArrayOffset);
-                    //Console.WriteLine("HeadingPairs (0xC): 0x{0:x8}({0,2})\t0x{1:x4}({1,4})\tType: 0x{2:x4}({2,4})", headPairPID, headPairOffset, headPairArrayOffset);
-                    //Console.WriteLine("Number of Elements: 0x{0:x4}({0,4}) @ 0x{1:x4}({1,4})", headingPairElments / 2, sec1Offset + headPairOffset + 4);
-                    Console.WriteLine("DocumentParts(0xD): 0x{0:x8}({0,2})\t0x{1:x4}({1,4})\t0x{2:x4}({2,4})", docPartsPID, docPartsOffset, docPartsArrayOffset);
-                    //Console.WriteLine("FMTID_UserDefinedProperties GUID2 {0}\tOffset2 0x{1:X4}({1,4})\tLength2 0x{2:X4}({2,4})\tCount2 0x{3:X4}({3,4})", sec2Guid, sec2Offset, section2Length, section2Count);
-                    //Console.WriteLine("HeadingString: Type {0:x2}, Pad {1:x2}, Length {2:x4}, String {3} @ {4:x4}",
-                    //    headingStringType, headingStringPadding, headingStringValueCch, headingString, sec1Offset + headPairOffset + 16);
-                    //Console.WriteLine("HeaderParts: Type {0:x2}, Pad {1:x2}, Count {2:x4}",
-                    //    headerPartsWType, headerPartsPadding, headerPartsValue);
-
-
-                    // start parsing document information 
-                    try
-                    {
-                        byte[] buf = sd.Skip(docPartsArrayOffset).Take(sec2Offset - docPartsArrayOffset).ToArray();
-                        var pos = 0;
-                        var lpstrElement = new List<KeyValuePair<int, string>>();
-                        for (var i = 0; i < docPartsElements; i++) // i < docPartsElements; // for complete parsing
-                        {
-                            var cch = BitConverter.ToInt32(buf, pos);
-                            if (cch % 4 != 0) cch += cch % 4;
-                            var value = Encoding.GetEncoding(codePageValue).GetString(buf, pos + 4, cch).TrimEnd(Char.MinValue);
-                            lpstrElement.Add(new KeyValuePair<int, string>(i, value));
-                            pos += 4 + cch;
-                        }
-
-                        Console.WriteLine("docPart successfully parsed!!!");
-
-                        var patternList = new Dictionary<string, string>
-                        {
-                            { "AppVerEN", "3ds Max Version" },
-                            { "FileVerEN", "Saved As Version" },
-                            { "AppVerCN", "3ds Max 版本" },
-                            { "FileVerCN", "另存为版本" },
-                            { "AppVerJA", "3ds Max バージョン" },
-                            { "FileVerJA", "バージョンとして保存" }
-                        };
-
-                        var verA = "-";
-                        var verB = "-";
-
-                        foreach (var sPattern in patternList)
-                        {
-                            foreach (var k in lpstrElement)
-                            {
-                                if (Regex.IsMatch(k.Value, sPattern.Value, RegexOptions.IgnoreCase))
-                                {
-                                    if (sPattern.Key == "AppVerEN" || sPattern.Key == "AppVerCN" || sPattern.Key == "AppVerJA")
-                                    {
-                                        verA = k.Value.Split(' ').Last();
-                                        Console.WriteLine("3ds Max Version: {0}", verA);
-                                    }
-                                    else if (sPattern.Key == "FileVerEN" || sPattern.Key == "FileVerCN" || sPattern.Key == "FileVerJA")
-                                    {
-                                        verB = k.Value.Split(' ').Last();
-                                        Console.WriteLine("Saved As Version: {0}", verA);
-                                    }
-                                }
-                            }
-                        }
-                        ListView1.Items.Add(new LvItem { FileName = System.IO.Path.GetFileNameWithoutExtension(file), Version = MaxString(verA), SaveAsVersion = MaxString(verB) });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex.ToString());
+                        // VtHeadingPairElement
+                        // headingString
+                        var stringType = BitConverter.ToInt16(buf, pos);
+                        pos += 2;
+                        var headStrPadding = BitConverter.ToInt16(buf, pos);
+                        pos += 2;
+                        var cch = BitConverter.ToInt32(buf, pos);
+                        if (cch % 4 != 0) cch += cch % 4; // treat string paddings
+                        pos += 4;
+                        var strValue = Encoding.GetEncoding(codePageValue).GetString(buf, pos, cch)
+                            .TrimEnd(char.MinValue);
+                        pos += cch;
+                        // headerParts
+                        var wType = BitConverter.ToInt16(buf, pos);
+                        pos += 2;
+                        var headPrtPadding = BitConverter.ToInt16(buf, pos);
+                        pos += 2;
+                        var partsValue = BitConverter.ToInt32(buf, pos);
+                        pos += 4;
+                        headParts.Add(strValue, partsValue);
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Console.WriteLine("Can't get steam data!!!!");
-                };
-                cf.Close();
+                    Console.WriteLine(ex.ToString());
+                }
+
+                // start parsing document information 
+                try
+                {
+                    // parse document information
+                    var buf = streamData.Skip(docPartsArrayOffset).Take(sec2Offset - docPartsArrayOffset).ToArray();
+                    var pos = 0;
+                    for (var i = 0; i < docPartsElements; i++) // i < docPartsElements; // for complete parsing
+                    {
+                        var cch = BitConverter.ToInt32(buf, pos);
+                        if (cch % 4 != 0) cch += cch % 4; // treat string paddings
+                        pos += 4;
+                        var value = Encoding.GetEncoding(codePageValue).GetString(buf, pos, cch).TrimEnd(char.MinValue);
+                        pos += cch;
+                        valueParts.Add(i, value);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
             }
+            cf.Close();
+
+            var returnValue = new Dictionary<string, Dictionary<int, string>>();
+            var idx = 0;
+            foreach (var entry in headParts)
+            {
+                var temp = new Dictionary<int, string>();
+
+                for (var i = idx; i < idx + entry.Value; i++)
+                    temp.Add(valueParts.Keys.ToArray()[i], valueParts.Values.ToArray()[i]);
+
+                returnValue.Add(entry.Key, temp);
+                idx += entry.Value;
+            }
+            return returnValue;
         }
 
         public static string MaxString(string ver)
@@ -317,6 +406,66 @@ namespace _3DSMaxFileVersion
                     break;
             }
             return maxVer;
+        }
+
+        private void BtnOpen_OnClick(object sender, RoutedEventArgs e)
+        {
+            var item = GetAncestorOfType<ListViewItem>(sender as Button);
+            if (item.Content is LvItem filePath)
+            {
+                if (filePath.FilePath != null)
+                {
+                    Process.Start(Path.GetDirectoryName(filePath.FilePath) ?? throw new InvalidOperationException());
+                }
+            }
+        }
+
+        private void BtnInfo_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (!(GetAncestorOfType<ListViewItem>(sender as Button).Content is LvItem item)) return;
+            var modalWindow = new ModalWindow
+            {
+                Title = item.FileName + ".max",
+                Owner = Application.Current.MainWindow,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var tb = modalWindow.MdlTxtBlck;
+            tb.Text = string.Empty;
+
+            foreach (var entry in item.DocInfo)
+            {
+                tb.Inlines.Add(new Run(entry.Key + "\n")
+                {
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.DarkSlateGray
+                });
+
+                foreach (var innerEntry in entry.Value)
+                    tb.Inlines.Add("  " + innerEntry.Value + "\n");
+            }
+            modalWindow.ShowDialog();
+        }
+
+        public T GetAncestorOfType<T>(FrameworkElement child) where T : FrameworkElement
+        {
+            var parent = VisualTreeHelper.GetParent(child);
+            if (parent != null && !(parent is T))
+                return GetAncestorOfType<T>((FrameworkElement) parent);
+            return (T) parent;
+        }
+
+        private class LvItem
+        {
+            public string About { get; set; }
+            public string AboutTooltip { get; set; }
+            public string FileName { get; set; }
+            public string FilePath { get; set; }
+            public string Version { get; set; }
+            public string SaveAsVersion { get; set; }
+
+            public Dictionary<string, string> SumInfo { get; set; }
+            public Dictionary<string, Dictionary<int, string>> DocInfo { get; set; }
         }
     }
 }
