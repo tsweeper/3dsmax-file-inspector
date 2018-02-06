@@ -162,7 +162,7 @@ namespace _3DSMaxFileVersion
             var objInfo = docInfo.ElementAt(4).Value.Values.ToArray();
             var alcNodes = new[]
             {
-                "×þ×ü", "¡¡×ý×û", "¡¡¡¡", "¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡¡¡", "Rectangles135", "×ú×ú", "×þ×ú"
+                "×þ×ü", "¡¡×ý×û", "¡¡¡¡", "¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡", "¡¡¡¡¡¡¡¡¡¡¡¡¡¡", "Rectangles135", "×ú×ú", "×þ×ú", "×t×ü", "??×y×?", "　", ""
             };
             var alcHashSet = new HashSet<string>(alcNodes);
             return objInfo.Count(alcHashSet.Contains);
