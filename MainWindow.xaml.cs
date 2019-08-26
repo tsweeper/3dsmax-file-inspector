@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -64,8 +63,8 @@ namespace _3DSMaxFileVersion
 
             // Create an enumeration of the files we will want to process that simply accumulates these values...
             long total = 0;
-            var fcounter = new CSharpTest.Net.IO.FindFile(directory, "*.max", true, true, true) {RaiseOnAccessDenied = false};
-            fcounter.FileFound +=
+            var findFile = new CSharpTest.Net.IO.FindFile(directory, "*.max", true, true, true) {RaiseOnAccessDenied = false};
+            findFile.FileFound +=
                 (o, e) =>
                 {
                     if (!e.IsDirectory)
@@ -75,7 +74,7 @@ namespace _3DSMaxFileVersion
                 };
 
             // Start a high-priority thread to perform the accumulation
-            Thread t = new Thread(fcounter.Find)
+            var t = new Thread(findFile.Find)
             {
                 IsBackground = true,
                 Priority = ThreadPriority.AboveNormal,
@@ -96,13 +95,13 @@ namespace _3DSMaxFileVersion
                     if (!e.IsDirectory)
                     {
                         //ProcessFile(e.FullPath);
-                        Console.WriteLine("found {0}", e.FullPath);
+                        Console.WriteLine($@"found {e.FullPath}");
                         // Update the percentage complete...
-                        long progress = ++count * 100 / Interlocked.Read(ref total);
+                        var progress = ++count * 100 / Interlocked.Read(ref total);
                         if (progress > percentage && progress <= 100)
                         {
                             percentage = progress;
-                            Console.WriteLine("{0}% complete.", percentage);
+                            Console.WriteLine($@"{percentage}% complete.");
                         }
                     }
                 };
@@ -227,9 +226,9 @@ namespace _3DSMaxFileVersion
                 for (var i = 0; i < sec1Cnt; i++)
                 {
                     var pid = BitConverter.ToInt32(streamData, sec1Offset + 8 + 8 * i); // 0x4c byte[4]  property id
-                    var poffset =
+                    var pOffset =
                         BitConverter.ToInt32(streamData, sec1Offset + 8 + 8 * i + 4); // 0x50 byte[4]  property offset
-                    docProperties.Add(pid, poffset);
+                    docProperties.Add(pid, pOffset);
                 }
 
                 // get CodePage property   wType[2] padding[2] value[2] unused[2]   = total 8 bytes
@@ -403,6 +402,12 @@ namespace _3DSMaxFileVersion
                     break;
                 case "20.00":
                     maxVer = "2018";
+                    break;
+                case "21.00":
+                    maxVer = "2019";
+                    break;
+                case "22.00":
+                    maxVer = "2020";
                     break;
             }
             return maxVer;

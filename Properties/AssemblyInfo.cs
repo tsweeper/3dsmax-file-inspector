@@ -5,12 +5,12 @@ using System.Windows;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("3ds Max File Inspector")]
+[assembly: AssemblyDescription("https://github.com/tsweeper/3dsmax-file-inspector")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Shanghai Art Empire Co., Ltd.")]
-[assembly: AssemblyProduct("3ds Max File Version Inspector")]
-[assembly: AssemblyCopyright("©2018, Art Empire, Simon Lee")]
+[assembly: AssemblyCompany("https://www.linkedin.com/in/tsweeper/")]
+[assembly: AssemblyProduct("3ds Max File Inspector")]
+[assembly: AssemblyCopyright("©2019, Simon Lee")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -49,5 +49,5 @@ using System.Windows;
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.2018.02.06")]
-[assembly: AssemblyFileVersion("1.2018.02.06")]
+[assembly: AssemblyVersion("1.2019.08.26")]
+[assembly: AssemblyFileVersion("1.2019.08.26")]
