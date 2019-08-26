@@ -5,7 +5,7 @@ A simple WPF application shows 3ds max file (.MAX) properties without 3ds max ap
 It is usuful to non-artist who want to know basic information but didn't install 3ds Max on their system. 
 
 - Set Folder path > Gather Max files
-- (Optional, with caution) Can gather Max files from subdirectories recursively
+- (Optional, use with caution) Can gather Max files from subdirectories recursively
 
 Then it will show each files information includes,
 
