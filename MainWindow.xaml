@@ -19,10 +19,22 @@
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
             <StatusBarItem Padding="10,2,10,2">
-                <TextBlock Name="LblPath">v20180108</TextBlock>
+                <TextBlock Name="LblPath" xmlns:ref="clr-namespace:System.Reflection;assembly=mscorlib" xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    <TextBlock.Text>
+                        <Binding Path="Version">
+                            <Binding.Source>
+                                <ObjectDataProvider MethodName="GetName">
+                                    <ObjectDataProvider.ObjectInstance>
+                                        <ObjectDataProvider MethodName="GetEntryAssembly" ObjectType="{x:Type ref:Assembly}" />
+                                    </ObjectDataProvider.ObjectInstance>
+                                </ObjectDataProvider>
+                            </Binding.Source>
+                        </Binding>
+                    </TextBlock.Text>
+                </TextBlock>
             </StatusBarItem>
             <Separator Grid.Column="1" Padding="5,2,5,2"/>
-            <StatusBarItem Grid.Column="2" Padding="10,2,10,2" Content="©2018 Shanghai Art Empire, Simon Lee" HorizontalAlignment="Right"/>
+            <StatusBarItem Grid.Column="2" Padding="10,2,10,2" Content="©2018, Simon Lee" HorizontalAlignment="Right"/>
         </StatusBar>
         <Grid>
             <ListView x:Name="ListView1" Margin="10,10,10,30" HorizontalAlignment="Stretch">
