@@ -336,81 +336,14 @@ namespace _3DSMaxFileVersion
 
         public static string MaxString(string ver)
         {
-            var maxVer = ver;
-            switch (ver)
+            if (int.TryParse(ver.Split('.').First(), out int maxVer))
             {
-                case "1.0":
-                    maxVer = "1";
-                    break;
-                case "2.0":
-                    maxVer = "2";
-                    break;
-                case "3.0":
-                    maxVer = "3";
-                    break;
-                case "4.0":
-                    maxVer = "4";
-                    break;
-                case "5.0":
-                    maxVer = "5";
-                    break;
-                case "6.0":
-                    maxVer = "6";
-                    break;
-                case "7.0":
-                    maxVer = "7";
-                    break;
-                case "8.0":
-                    maxVer = "8";
-                    break;
-                case "9.0":
-                case "9.00":
-                    maxVer = "9";
-                    break;
-                case "10.0":
-                case "10.00":
-                    maxVer = "2008";
-                    break;
-                case "11.0":
-                case "11.00":
-                    maxVer = "2009";
-                    break;
-                case "12.0":
-                case "12.00":
-                    maxVer = "2010";
-                    break;
-                case "13.00":
-                    maxVer = "2011";
-                    break;
-                case "14.00":
-                    maxVer = "2012";
-                    break;
-                case "15.00":
-                    maxVer = "2013";
-                    break;
-                case "16.00":
-                    maxVer = "2014";
-                    break;
-                case "17.00":
-                    maxVer = "2015";
-                    break;
-                case "18.00":
-                    maxVer = "2016";
-                    break;
-                case "19.00":
-                    maxVer = "2017";
-                    break;
-                case "20.00":
-                    maxVer = "2018";
-                    break;
-                case "21.00":
-                    maxVer = "2019";
-                    break;
-                case "22.00":
-                    maxVer = "2020";
-                    break;
+                if (maxVer > 10)
+                {
+                    maxVer += 1998;
+                }
             }
-            return maxVer;
+            return maxVer == 0 ? "?" : maxVer.ToString();
         }
 
         private void BtnOpen_OnClick(object sender, RoutedEventArgs e)
